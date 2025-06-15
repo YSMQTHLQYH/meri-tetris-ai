@@ -1,13 +1,15 @@
 import random
 from enum import Enum
+from piece import PieceRotation
+
 class InputAction(Enum):
     NOP = 0
     MOVE_LEFT = 1
     MOVE_RIGHT = 2
     DAS_LEFT = 3
     DAS_RIGHT = 4
-    ROTATE_LEFT = 5
-    ROTATE_RIGHT = 6
+    ROTATE_CCW = 5
+    ROTATE_CW = 6
     ROTATE_180 = 7
     HOLD = 8
     TAP_DOWN = 9
@@ -33,13 +35,31 @@ class PieceQueue:
 
 class Board:
     board_width = 10
-    board_height = 24
+    board_height = 25
     topout_height = 20
     
     def __init__(self, rng_seed = None):
         self.matrix = [[0] * self.board_width for _ in range(self.board_height)]
         self.current_piece = None
         self.queue = PieceQueue(rng_seed)
+    
+    #retuns number of lines cleared, does actually do the line clear
+    def check_line_clear(self):
+        clear_count = 0
+        for j in range(self.board_height - 1, -1, -1):
+            line_full = True
+            for i in range(self.board_width):
+                if self.matrix[j][i] == 0:
+                    line_full = False
+            
+            if line_full:
+                print("Line: ", j, "Clear: ", line_full)
+                for k in range(j, self.board_height - 1):
+                    self.matrix[k] = self.matrix[k + 1][:]
+                
+                clear_count += 1
+        
+        return clear_count
         
     def place_piece(self, piece):
         if piece is None:
@@ -51,6 +71,7 @@ class Board:
                 if t != 0:
                     self.matrix[j + piece.pos[1]][i + piece.pos[0]] = t
         
+        print(self.check_line_clear())
         self.current_piece = None
     
     #returns true if piece moved by offset intersects with anything in the board
@@ -97,46 +118,37 @@ class Board:
         while self.move_piece(piece, direction):
             pass
     
-    def print_matrix(self, piece = None):
-        print("\n", self.queue.q, "\n")
-        px = (0, 0)
-        py = (0, 0)
-        if piece is not None:
-            ps = len(piece.matrix)
-            px = (piece.pos[0], piece.pos[0] + ps)
-            py = (piece.pos[1], piece.pos[1] + ps)
+    #returns tuple, first is if the rotation was successful and second is kick number (0 if no kick needed)
+    def rotate_piece(self, piece, target_rot:PieceRotation):
+        if piece is None:
+            return
         
-        for j in range(self.board_height - 1, -1, -1):
-            out = "|"
-            for i in range(self.board_width):
-                if (px[0] <= i < px[1]) and (py[0] <= j < py[1]):
-                    #tile inside piece area
-                    t = piece.matrix[j - piece.pos[1]][i - piece.pos[0]]
-                    if t != 0:
-                        c = -1
-                    else:
-                        c = self.matrix[j][i]
-                        
-                else:
-                    #tile far from piece
-                    c = self.matrix[j][i]
-                
-                #topout line
-                if c == 0 and j == self.topout_height:
-                    c = -2
-                
-                match c:
-                    case 0:
-                        out += " . "
-                    case -1:
-                        out += " X "
-                    case -2:
-                        out += "---"
-                    case _:
-                        out += "|" + str(c) + "|"
-            out += "|"
-            print(out)
+        start_rot = piece.rot
+        if start_rot == target_rot:
+            return
+        
+        success = False
+        
+        piece.rot = target_rot
+        piece.update_matrix()
+        
+        i = 0
+        for i in range(5):
+            print("kick: ", i, " offset: ", piece.get_kick_offset(start_rot, target_rot, i))
+            success = self.move_piece(piece, piece.get_kick_offset(start_rot, target_rot, i))
+            print("success: ", success)
+            if success:
+                break
+        
+        
+        if success:
+            return (True, i)
+        else:
+            piece.rot = start_rot
+            piece.update_matrix()
+            return (False, 0)
     
+
     def handle_input_action(self, cmd:InputAction):
         match cmd:
             case InputAction.NOP:
@@ -167,11 +179,80 @@ class Board:
             case InputAction.HOLD:
                 pass
             
-            case InputAction.ROTATE_LEFT:
-                pass
+            case InputAction.ROTATE_CCW:
+                match self.current_piece.rot:
+                    case PieceRotation.UP:
+                        self.rotate_piece(self.current_piece, PieceRotation.LEFT)
+                    case PieceRotation.RIGHT:
+                        self.rotate_piece(self.current_piece, PieceRotation.UP)
+                    case PieceRotation.DOWN:
+                        self.rotate_piece(self.current_piece, PieceRotation.RIGHT)
+                    case PieceRotation.LEFT:
+                        self.rotate_piece(self.current_piece, PieceRotation.DOWN)     
             
-            case InputAction.ROTATE_RIGHT:
-                pass
+            case InputAction.ROTATE_CW:
+                match self.current_piece.rot:
+                    case PieceRotation.UP:
+                        self.rotate_piece(self.current_piece, PieceRotation.RIGHT)
+                    case PieceRotation.RIGHT:
+                        self.rotate_piece(self.current_piece, PieceRotation.DOWN)
+                    case PieceRotation.DOWN:
+                        self.rotate_piece(self.current_piece, PieceRotation.LEFT)
+                    case PieceRotation.LEFT:
+                        self.rotate_piece(self.current_piece, PieceRotation.UP)
             
             case InputAction.ROTATE_180:
-                pass
+                match self.current_piece.rot:
+                    case PieceRotation.UP:
+                        self.rotate_piece(self.current_piece, PieceRotation.DOWN)
+                    case PieceRotation.RIGHT:
+                        self.rotate_piece(self.current_piece, PieceRotation.LEFT)
+                    case PieceRotation.DOWN:
+                        self.rotate_piece(self.current_piece, PieceRotation.UP)
+                    case PieceRotation.LEFT:
+                        self.rotate_piece(self.current_piece, PieceRotation.RIGHT)
+    
+    def print_matrix(self, piece = None):
+        print("\n", self.queue.q, "\n")
+        px = (0, 0)
+        py = (0, 0)
+        if piece is not None:
+            ps = len(piece.matrix)
+            px = (piece.pos[0], piece.pos[0] + ps)
+            py = (piece.pos[1], piece.pos[1] + ps)
+        
+        for j in range(self.board_height - 1, -1, -1):
+            out = "|"
+            for i in range(self.board_width):
+                near_piece = False
+                if (px[0] <= i < px[1]) and (py[0] <= j < py[1]):
+                    #tile inside piece area
+                    t = piece.matrix[j - piece.pos[1]][i - piece.pos[0]]
+                    if t != 0:
+                        c = -1
+                    else:
+                        c = self.matrix[j][i]
+                    near_piece = True
+                        
+                else:
+                    #tile far from piece
+                    c = self.matrix[j][i]
+                
+                #topout line
+                if c == 0 and j == self.topout_height:
+                    c = -2
+                
+                match c:
+                    case 0:
+                        if near_piece: out += "| |"
+                        else: out += " . "
+                    case -1:
+                        out += "|X|"
+                    case -2:
+                        if near_piece: out += "| |"
+                        else: out += "---"
+                    case _:
+                        if near_piece: out += "|" + str(c) + "|"
+                        else: out += ":" + str(c) + ":"
+            out += "|"
+            print(out)
