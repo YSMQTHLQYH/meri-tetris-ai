@@ -32,7 +32,6 @@ class Piece:
                             [ 0, 1, 1],
                             [ 1, 1, 0]
                         ]
-                        print("upppp")
                         #effectve_origin = (0, 0)
                     case PieceRotation.RIGHT:
                         self.matrix = [
@@ -228,24 +227,32 @@ class Piece:
                             check_array = [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)]
                         case PieceRotation.LEFT:
                             check_array = [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)]
+                        case PieceRotation.DOWN:
+                            check_array = [(0, 0), (-1, 0), (-2, 0), (1, 0), (2, 0), (0, 1)]
                 case PieceRotation.RIGHT:
                     match(target_rot):
                         case PieceRotation.DOWN:
                             check_array = [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)]
                         case PieceRotation.UP:
                             check_array = [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)]
+                        case PieceRotation.LEFT:
+                            check_array = [(0, 0), (0, 1), (0, 2), (0, -1), (0, -2), (-1, 0)]
                 case PieceRotation.DOWN:
                     match(target_rot):
                         case PieceRotation.LEFT:
                             check_array = [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)]
                         case PieceRotation.RIGHT:
                             check_array = [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)]
+                        case PieceRotation.UP:
+                            check_array = [(0, 0), (1, 0), (2, 0), (-1, 0), (-2, 0), (0, -1)]
                 case PieceRotation.LEFT:
                     match(target_rot):
                         case PieceRotation.UP:
                             check_array = [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)]
                         case PieceRotation.DOWN:
                             check_array = [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)]
+                        case PieceRotation.RIGHT:
+                            check_array = [(0, 0), (0, 1), (0, 2), (0, -1), (0, -2), (1, 0)]
         else:
             match start_rot:
                 case PieceRotation.UP:
@@ -254,24 +261,32 @@ class Piece:
                             check_array = [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)]
                         case PieceRotation.LEFT:
                             check_array = [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)]
+                        case PieceRotation.DOWN:
+                            check_array = [(0, 0), (0, 1), (1, 1), (-1, 1), (1, 0), (-1, 0)]
                 case PieceRotation.RIGHT:
                     match(target_rot):
                         case PieceRotation.DOWN:
                             check_array = [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]
                         case PieceRotation.UP:
                             check_array = [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]
+                        case PieceRotation.LEFT:
+                            check_array = [(0, 0), (1, 0), (1, 2), (1, 1), (0, 2), (0, 1)]
                 case PieceRotation.DOWN:
                     match(target_rot):
                         case PieceRotation.LEFT:
                             check_array = [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)]
                         case PieceRotation.RIGHT:
                             check_array = [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)]
+                        case PieceRotation.UP:
+                            check_array = [(0, 0), (0, -1), (-1, -1), (1, -1), (-1, 0), (1, 0)]
                 case PieceRotation.LEFT:
                     match(target_rot):
                         case PieceRotation.UP:
                             check_array = [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]
                         case PieceRotation.DOWN:
                             check_array = [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]
+                        case PieceRotation.RIGHT:
+                            check_array = [(0, 0), (-1, 0), (-1, 2), (-1, 1), (0, 2), (0, 1)]
         if len(check_array) > check:
             return check_array[check]
         else:

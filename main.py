@@ -45,4 +45,4 @@ while True:
         pass
         #print(, " ", player.current_piece.pos)
     else:
-        player.current_piece = Piece(player.queue.get_next_piece(), (4, 21), PieceRotation.UP)
+        player.spawn_next_piece()

@@ -1,6 +1,6 @@
 import random
 from enum import Enum
-from piece import PieceRotation
+from piece import *
 
 class InputAction(Enum):
     NOP = 0
@@ -15,9 +15,15 @@ class InputAction(Enum):
     TAP_DOWN = 9
     SOFT_DROP = 10
     HARD_DROP = 11
+
+class ClearType(Enum):
+    SKIM = 0
+    ALL_SPIN = 1
+    T_SPIN_MINI = 2
+    T_SPIN = 3
     
 class PieceQueue:
-    _pieces_population = ["z", "l", "o", "s", "i", "j", "t"]
+    pieces_population = ["z", "l", "o", "s", "i", "j", "t"]
     
     def __init__(self, rng_seed = None):
         self.rng = random.Random(rng_seed)
@@ -25,7 +31,7 @@ class PieceQueue:
         self.generate_next_bag()
     
     def generate_next_bag(self):
-        self.q += self.rng.sample(self._pieces_population, 7)
+        self.q += self.rng.sample(self.pieces_population, 7)
     
     def get_next_piece(self):
         p = self.q.pop(0)
@@ -41,7 +47,21 @@ class Board:
     def __init__(self, rng_seed = None):
         self.matrix = [[0] * self.board_width for _ in range(self.board_height)]
         self.current_piece = None
+        self.held_piece = None
         self.queue = PieceQueue(rng_seed)
+        
+        self.can_hold:bool = True #true if last piece was from hold, so you cant swap the same two pieces forever
+        self.combo_count =  0
+        self._last_move_was_rotate:bool = False #used for checking T-spins
+        self._last_move_kick = 0 #used for checking T-spins
+    
+    
+    def spawn_piece(self, p):
+        self.current_piece = Piece(p, (4, self.topout_height + 1), PieceRotation.UP)
+    
+    def spawn_next_piece(self):
+        self.spawn_piece(self.queue.get_next_piece())
+        self.can_hold = True 
     
     #retuns number of lines cleared, does actually do the line clear
     def check_line_clear(self):
@@ -65,14 +85,69 @@ class Board:
         if piece is None:
             return
 
+        #T-spin check
+        clear_type:ClearType = ClearType.SKIM
+        if self._last_move_was_rotate:
+            if piece.piece_type == 't':
+                corners = (
+                    self.get_tile(piece.pos[0], piece.pos[1] + 2),      #top left
+                    self.get_tile(piece.pos[0] + 2, piece.pos[1] + 2),  #top right
+                    self.get_tile(piece.pos[0] + 2, piece.pos[1]),      #bottom right
+                    self.get_tile(piece.pos[0], piece.pos[1])           #bottom left
+                )
+                
+                if corners.count(0) <= 1:
+                    if self._last_move_kick >= 3:
+                        clear_type = ClearType.T_SPIN #execption for tst kick
+                    else:
+                        tspin_full = False
+                        match piece.rot:
+                            case PieceRotation.UP:
+                                tspin_full = corners[0] and corners[1]
+                            case PieceRotation.RIGHT:
+                                tspin_full = corners[1] and corners[2]
+                            case PieceRotation.DOWN:
+                                tspin_full = corners[2] and corners[3]
+                            case PieceRotation.LEFT:
+                                tspin_full = corners[3] and corners[0]
+                        if tspin_full:
+                            clear_type = ClearType.T_SPIN
+                        else:
+                            clear_type = ClearType.T_SPIN_MINI
+                    print("tspin: ", clear_type)
+            else:
+                #all spins might need a better check dunno
+                if self.check_piece_collision(piece, (1, 0)) and self.check_piece_collision(piece, (-1, 0)):
+                    clear_type = ClearType.ALL_SPIN
+        
+        print("Spin? ",clear_type)
+
+        #actually place piece
         for j in range(len(piece.matrix)):
             for i in range(len(piece.matrix[j])):
                 t = piece.matrix[j][i]
                 if t != 0:
                     self.matrix[j + piece.pos[1]][i + piece.pos[0]] = t
-        
-        print(self.check_line_clear())
         self.current_piece = None
+        
+        #check line clears
+        lines_cleared = self.check_line_clear()
+        print("lines_cleared: ",lines_cleared)
+        if lines_cleared:
+            self.combo_count += 1
+        else:
+            self.combo_count = 0
+        print("combo count: ",self.combo_count)
+        
+        
+        #check for perfect clear
+        pc:bool = True
+        for i in range(self.board_height):
+            if any(self.matrix[i]):
+                pc = False
+                break
+        print("is pc test: ", pc)
+        
     
     #returns true if piece moved by offset intersects with anything in the board
     #also returns true if piece has any tile outside of the board
@@ -97,6 +172,12 @@ class Board:
                     return True
                 
         return False
+
+    #returns 10 if outside of board, as it's considered as occupied
+    def get_tile(self, x, y):
+        if x < 0 or x >= self.board_width or y < 0 or y >= self.board_height:
+            return 10
+        return self.matrix[y][x]
         
     #moves piece by distance, returns true if the piece was moved, false if it intersected the board            
     def move_piece(self, piece, offset = (0, 0)):
@@ -108,6 +189,8 @@ class Board:
         else:
             #stoopid python why is tuple + operator concatenation instead of addition?
             piece.pos = piece.pos[0] + offset[0], piece.pos[1] + offset[1]
+            self._last_move_was_rotate = False
+            self._last_move_kick = 0
             return True
     
     #das/hard drop movement
@@ -133,7 +216,7 @@ class Board:
         piece.update_matrix()
         
         i = 0
-        for i in range(5):
+        for i in range(6):
             print("kick: ", i, " offset: ", piece.get_kick_offset(start_rot, target_rot, i))
             success = self.move_piece(piece, piece.get_kick_offset(start_rot, target_rot, i))
             print("success: ", success)
@@ -142,6 +225,9 @@ class Board:
         
         
         if success:
+            self._last_move_kick = i
+            
+            self._last_move_was_rotate = True
             return (True, i)
         else:
             piece.rot = start_rot
@@ -177,7 +263,16 @@ class Board:
                 self.place_piece(self.current_piece)
             
             case InputAction.HOLD:
-                pass
+                if not self.can_hold:
+                    return
+                
+                t = self.current_piece.piece_type
+                if self.held_piece in PieceQueue.pieces_population:
+                    self.spawn_piece(self.held_piece)
+                else:
+                    self.spawn_next_piece()
+                self.held_piece = t
+                self.can_hold = False
             
             case InputAction.ROTATE_CCW:
                 match self.current_piece.rot:
@@ -214,6 +309,7 @@ class Board:
     
     def print_matrix(self, piece = None):
         print("\n", self.queue.q, "\n")
+        print("hold: ", self.held_piece, "\n")
         px = (0, 0)
         py = (0, 0)
         if piece is not None:
