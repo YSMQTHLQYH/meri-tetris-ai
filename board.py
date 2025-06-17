@@ -44,20 +44,33 @@ class Board:
     board_height = 25
     topout_height = 20
     
+    ticks_per_gravity_drop = 5
+    ticks_before_lockout = 10
+    max_lockout_resets = 10
+    
     def __init__(self, rng_seed = None):
         self.matrix = [[0] * self.board_width for _ in range(self.board_height)]
         self.current_piece = None
         self.held_piece = None
         self.queue = PieceQueue(rng_seed)
         
+        self.topout = False
+        
         self.can_hold:bool = True #true if last piece was from hold, so you cant swap the same two pieces forever
         self.combo_count =  0
         self._last_move_was_rotate:bool = False #used for checking T-spins
         self._last_move_kick = 0 #used for checking T-spins
+        
+        self.gravity_tick = 0
+        self.lockout_tick = 0
+        self.lockout_reset_count = 0
     
     
     def spawn_piece(self, p):
         self.current_piece = Piece(p, (4, self.topout_height + 1), PieceRotation.UP)
+        self.gravity_tick = 0
+        self.lockout_tick = 0
+        self.lockout_reset_count = 0
     
     def spawn_next_piece(self):
         self.spawn_piece(self.queue.get_next_piece())
@@ -123,11 +136,19 @@ class Board:
         print("Spin? ",clear_type)
 
         #actually place piece
+        _topout = True
         for j in range(len(piece.matrix)):
             for i in range(len(piece.matrix[j])):
                 t = piece.matrix[j][i]
                 if t != 0:
-                    self.matrix[j + piece.pos[1]][i + piece.pos[0]] = t
+                    x, y = i + piece.pos[0], j + piece.pos[1]
+                    self.matrix[y][x] = t
+                    if y < self.topout_height: _topout = False
+        
+        if _topout:
+            self.topout = True
+            print("topout")
+        
         self.current_piece = None
         
         #check line clears
@@ -178,7 +199,30 @@ class Board:
         if x < 0 or x >= self.board_width or y < 0 or y >= self.board_height:
             return 10
         return self.matrix[y][x]
+    
+    
+    def check_lockout(self):
+        if self.current_piece is None:
+            self.lockout_tick = 0
+            return
+
+        if self.check_piece_collision(self.current_piece, (0, -1)):
+            self.lockout_tick += 1
+            if self.lockout_tick >= self.ticks_before_lockout:
+                self.place_piece(self.current_piece)
         
+        print("lockout: ", self.lockout_tick, "resets: ", self.lockout_reset_count)
+    
+    def check_gravity(self):
+        if self.current_piece is None:
+            self.gravity_tick = 0
+            return
+        
+        self.gravity_tick += 1
+        if self.gravity_tick >= self.ticks_per_gravity_drop:
+            self.gravity_tick = 0
+            self.move_piece(self.current_piece, (0, -1))
+     
     #moves piece by distance, returns true if the piece was moved, false if it intersected the board            
     def move_piece(self, piece, offset = (0, 0)):
         if piece is None:
@@ -225,9 +269,16 @@ class Board:
         
         
         if success:
+            self._last_move_was_rotate = True
+            
             self._last_move_kick = i
             
-            self._last_move_was_rotate = True
+            #lockout reset
+            if self._last_move_kick > 0 and self.lockout_tick > 0:
+                self.lockout_reset_count += 1
+                if self.lockout_reset_count <= self.max_lockout_resets:
+                    self.lockout_tick = 0
+            
             return (True, i)
         else:
             piece.rot = start_rot
@@ -306,6 +357,11 @@ class Board:
                         self.rotate_piece(self.current_piece, PieceRotation.UP)
                     case PieceRotation.LEFT:
                         self.rotate_piece(self.current_piece, PieceRotation.RIGHT)
+        
+        self.check_lockout()
+        
+        if self.current_piece is None:
+            self.spawn_next_piece()
     
     def print_matrix(self, piece = None):
         print("\n", self.queue.q, "\n")
